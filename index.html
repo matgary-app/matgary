@@ -57,6 +57,14 @@ label{display:block;font-size:13.5px;color:var(--mut)}
 .hide{display:none}#toast{position:fixed;top:12px;inset-inline:16px;background:var(--red);color:#fff;border-radius:10px;padding:10px;z-index:9;text-align:center}
 .qr svg{width:200px;height:200px;background:#fff;padding:8px;border-radius:10px}
 
+.pay{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:6px}.pay span{font-weight:800;word-break:break-word}.pay .cp{background:var(--pr);color:#fff;padding:6px 10px;font-size:13px;flex:none}
+
+.pic{width:64px;height:64px;object-fit:cover;border-radius:10px;flex:none;cursor:pointer}
+#pv{max-width:100%;max-height:220px;border-radius:10px;margin-top:6px}
+.red{border:3px solid #7E1D12!important}.red b{display:block;font-size:16px;margin-bottom:6px}.red p{font-weight:800;margin:6px 0 0}
+.blue{background:#1B4F9C!important;border:3px solid #0F3370!important;color:#fff}.blue b,.blue p{color:#fff!important}
+.irow{display:flex;gap:10px;align-items:flex-start}.irow .if{flex:1;min-width:0}.irow .row{grid-template-columns:1fr 100px 54px;margin-top:6px}
+.th{width:76px;height:76px;border:1.5px dashed var(--line);border-radius:12px;display:grid;place-items:center;cursor:pointer;overflow:hidden;flex:none;color:var(--mut);font-size:12px;text-align:center}.th img{width:100%;height:100%;object-fit:cover}
 </style>
 </head>
 <body>
@@ -81,7 +89,23 @@ const wa=p=>{const d=dg(p);return d.startsWith('0')?'2'+d:d};
 const slug=(location.pathname.match(/\/m\/([a-z0-9-]+)/)||[])[1]||new URLSearchParams(location.search).get('s')||'';
 let M,items=[],cart={};
 
+function payList(){
+  const L=(M.pay_info||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  if(!L.length)return h('p',{},'سيخبرك التاجر برقم التحويل.');
+  const ar=x=>x.replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  return h('div',{},L.map(l=>{
+    const num=((ar(l).match(/\d[\d\s-]{8,}\d/)||[''])[0]).replace(/[\s-]/g,'');
+    return h('div',{class:'pay'},h('span',{},l),num&&h('button',{class:'cp',onclick:e=>{
+      navigator.clipboard.writeText(num).then(()=>{e.target.textContent='تم النسخ ✓'}).catch(()=>{e.target.textContent=num})}},'نسخ الرقم'));
+  }));
+}
 const field=(id,l,p='',t='text')=>h('div',{},h('label',{for:id},l),h('input',{id,type:t,placeholder:p}));
+
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const imgUrl=p=>SB_URL+'/storage/v1/object/public/items/'+p;
+const minDate=()=>ymd(new Date(Date.now()+Math.ceil((M.lead_hours||0)/24)*864e5));
+function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
+let proof=null;
 
 async function load(){
   const app=$('app');
@@ -97,14 +121,21 @@ function draw(){
   app.append(h('h1',{},M.name),M.activity&&h('p',{class:'sub'},M.activity),
     M.fixed_prices&&M.fixed_msg&&h('div',{class:'note'},M.fixed_msg),
     M.days&&h('div',{class:'note'},'التوصيل / المواعيد: '+M.days),
+    M.delivery_note&&h('div',{class:'note'},'🚚 '+M.delivery_note),
+    M.deposit_pct>0&&h('div',{class:'note'},'العربون: '+M.deposit_pct+'٪ من قيمة الطلب، وتظهر لك أرقام التحويل عند اختيار طلبك.'),
     h('div',{id:'list'}),
     h('div',{class:'box'},field('cn','الاسم ثلاثي (مطلوب)','محمد أحمد علي'),field('cp','رقم موبايلك (مطلوب)','01xxxxxxxxx','tel'),
       field('cp2','رقم تاني لتأكيد الطلب (غير رقمك)','','tel'),h('b',{},'العنوان بالتفصيل'),
       field('a1','المحافظة'),field('a2','المدينة'),field('a3','القرية أو الحي'),field('a4','الشارع'),field('a5','رقم المنزل، بجوار كذا أو أمام كذا'),field('nt','ملاحظات (اختياري)')),
-    h('div',{id:'bk',class:'box red hide'},h('label',{for:'bd'},'موعد الاستلام المطلوب (حجز مسبق)'),h('input',{id:'bd',type:'date'}),h('p',{id:'bl'})),
-    h('div',{id:'dp',class:'box hide'}),h('div',{id:'rf',class:'box blue hide'}),
+    h('div',{id:'bk',class:'box red hide'},h('b',{},'⚠ حجز مسبق: انتبه للموعد'),h('label',{for:'bd'},'موعد الاستلام المطلوب'),h('input',{id:'bd',type:'date'}),h('p',{id:'bl'})),
+    h('div',{id:'dp',class:'box hide'}),
+    h('div',{id:'pfb',class:'box hide'},h('label',{for:'pf'},'صورة (سكرين شوت) تحويل العربون — مطلوبة قبل إرسال الطلب'),h('input',{id:'pf',type:'file',accept:'image/*'}),h('img',{id:'pv',class:'hide',alt:'معاينة صورة التحويل'})),
+    h('div',{id:'rf',class:'box blue hide'}),
     h('div',{class:'tot'},h('span',{},'الإجمالي'),h('span',{id:'sum'},'٠ جنيه')),
     h('div',{id:'err',class:'err hide',role:'alert'}),h('button',{class:'b1',id:'go',onclick:send},'أرسل الطلب'));
+  $('pf').onchange=async e=>{const f=e.target.files[0];proof=null;$('pv').classList.add('hide');if(!f)return;
+    try{proof=await compress(f);$('pv').src=URL.createObjectURL(proof);$('pv').classList.remove('hide')}
+    catch(x){const r=$('err');r.textContent='تعذّر قراءة الصورة، جرّب صورة أخرى';r.classList.remove('hide')}};
   list();upd();
 }
 function list(){
@@ -114,6 +145,7 @@ function list(){
   [...items].sort((a,b)=>ord(a.kind)-ord(b.kind)).forEach(it=>{
     const set=d=>{cart[it.id]=Math.max(0,(cart[it.id]||0)+d);list();upd()};
     l.append(h('div',{class:'dish'},
+      it.image_path&&h('img',{class:'pic',src:imgUrl(it.image_path),alt:it.name,loading:'lazy',onclick:()=>window.open(imgUrl(it.image_path),'_blank')}),
       h('div',{class:'i'},h('b',{},it.name),h('span',{},fmt(it.price)+' جنيه'),
         it.kind==='ready'&&h('em',{class:'tag'},'⚡ جاهز فوري'),it.kind==='booking'&&h('em',{class:'tag k'},'📅 حجز مسبق')),
       h('div',{class:'q'},h('button',{class:'m','aria-label':'أنقص',onclick:()=>set(-1)},'−'),h('i',{},fmt(cart[it.id]||0)),h('button',{'aria-label':'زد',onclick:()=>set(1)},'+'))));
@@ -123,10 +155,11 @@ function upd(){
   const sel=items.filter(i=>cart[i.id]>0),t=sel.reduce((a,i)=>a+i.price*cart[i.id],0),dep=Math.ceil(t*M.deposit_pct/100);
   $('sum').textContent=fmt(t)+' جنيه';
   const bk=sel.some(i=>i.kind==='booking');$('bk').classList.toggle('hide',!bk);
-  $('bl').textContent='هذا حجز مسبق وليس فوريًا'+(M.lead_time?': يلزم الحجز قبل الموعد بـ '+M.lead_time:'')+'.';
-  $('bd').min=new Date().toISOString().slice(0,10);
-  const d=$('dp');d.classList.toggle('hide',!(t&&dep>0));
-  d.textContent=dep>0?'العربون المطلوب: '+fmt(dep)+' جنيه'+(M.pay_info?' — حوّله على: '+M.pay_info:'')+'. بعد الإرسال ابعت صورة التحويل للتاجر على واتساب.':'';
+  const lh=M.lead_hours||0;
+  $('bl').textContent='هذا حجز مسبق وليس فوريًا. '+(lh?'لا يُقبل موعد قبل '+fmt(lh)+' ساعة على الأقل من الآن، وأقرب موعد متاح: '+minDate()+'.':'اختر الموعد المناسب.');
+  $('bd').min=minDate();
+  const d=$('dp');d.classList.toggle('hide',!(t&&dep>0));$('pfb').classList.toggle('hide',!(t&&M.deposit_pct>0));
+  d.textContent='';if(dep>0)d.append(h('b',{},'العربون المطلوب: '+fmt(dep)+' جنيه'),h('p',{},'حوّله على أحد الأرقام التالية، ثم أرفق صورة التحويل بالأسفل قبل إرسال الطلب:'),payList());
   const r=$('rf');r.classList.toggle('hide',!(t&&dep>0&&M.refund_text));r.textContent='';
   if(M.refund_text)r.append(h('b',{},'سياسة الاسترداد'),h('p',{},M.refund_text));
 }
@@ -144,22 +177,31 @@ async function send(){
   for(const [k,n] of A)if(!v(k))return err('اكتب '+n+' في العنوان');
   const bk=sel.some(i=>i.kind==='booking');
   if(bk&&!$('bd').value)return err('اختر موعد الاستلام المطلوب');
+  if(bk&&$('bd').value<minDate())return err('أقرب موعد متاح للحجز هو '+minDate());
+  if(M.deposit_pct>0&&!proof)return err('أرفق صورة تحويل العربون قبل إرسال الطلب');
   err('');const go=$('go');go.disabled=true;go.textContent='جارٍ الإرسال...';
-  const {error}=await db.rpc('place_order',{p_slug:slug,p_name:v('cn'),p_phone:v('cp'),p_phone2:v('cp2'),
+  let pp=null;
+  if(proof){
+    pp=M.id+'/'+(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2))+'.jpg';
+    const up=await db.storage.from('proofs').upload(pp,proof,{contentType:'image/jpeg'});
+    if(up.error){go.disabled=false;go.textContent='أرسل الطلب';return err('تعذّر رفع صورة التحويل، حاول مرة أخرى.')}
+  }
+  const {data,error}=await db.rpc('place_order',{p_slug:slug,p_name:v('cn'),p_phone:v('cp'),p_phone2:v('cp2'),
     p_address:A.map(([k,n])=>n+': '+v(k)).join(' - '),p_notes:v('nt'),
-    p_lines:sel.map(i=>({item_id:i.id,qty:cart[i.id]})),p_booking:bk?$('bd').value:null});
+    p_lines:sel.map(i=>({item_id:i.id,qty:cart[i.id]})),p_booking:bk?$('bd').value:null,p_proof:pp});
   go.disabled=false;go.textContent='أرسل الطلب';
   if(error){const m=error.message||'';
-    return err(m.includes('blocked')?'عذرًا، لا نستطيع استقبال طلبك حاليًا.':m.includes('below_min')?'قيمة الطلب أقل من الحد الأدنى.':m.includes('bad_input')?'راجع الاسم وأرقام الموبايل.':'تعذّر إرسال الطلب، حاول مرة أخرى.')}
-  done(total,v('cn'));
+    return err(m.includes('blocked')?'عذرًا، لا نستطيع استقبال طلبك حاليًا.':m.includes('below_min')?'قيمة الطلب أقل من الحد الأدنى.':m.includes('bad_input')?'راجع الاسم وأرقام الموبايل.':m.includes('booking_too_soon')?'موعد الحجز قريب جدًا، اختر موعدًا لاحقًا.':m.includes('proof_required')?'أرفق صورة تحويل العربون قبل الإرسال.':'تعذّر إرسال الطلب، حاول مرة أخرى.')}
+  done(data||{},v('cn'));
 }
-function done(total,name){
-  const dep=Math.ceil(total*M.deposit_pct/100),app=$('app');app.textContent='';
-  const msg='مرحبًا، أنا '+name+'. أرسلت طلبًا'+(dep>0?' وحوّلت العربون ('+dep+' جنيه). هذه صورة التحويل:':'.');
-  app.append(h('h1',{},'✓ تم استلام طلبك'),h('p',{class:'sub'},'سيتواصل معك '+M.name+' لتأكيد الطلب.'),
-    dep>0&&h('div',{class:'box'},h('b',{},'العربون المطلوب: '+fmt(dep)+' جنيه'),h('p',{},(M.pay_info?'حوّله على: '+M.pay_info+'. ':'')+'إن كان عليك طلب سابق لم يُستلم قد يطلب التاجر مبلغًا أكبر، وسيؤكده لك.')),
+function done(r,name){
+  const dep=r.deposit||0,app=$('app');app.textContent='';
+  const msg='مرحبًا، أنا '+name+'. رقم طلبي #'+(r.order_no||'')+(dep>0?'، وحوّلت العربون ('+dep+' جنيه) وأرفقت صورة التحويل في الموقع.':'.');
+  app.append(h('h1',{},'✓ تم استلام طلبك'),h('div',{class:'note'},'رقم طلبك: #'+(r.order_no||'')+' (احتفظ به)'),
+    h('p',{class:'sub'},'سيتواصل معك '+M.name+' لتأكيد الطلب.'),
+    dep>0&&h('div',{class:'box'},h('b',{},'العربون المحسوب: '+fmt(dep)+' جنيه'),h('p',{},'تم رفع صورة التحويل. لو حوّلت أقل من هذا المبلغ، سيتواصل معك التاجر. أرقام التحويل:'),payList()),
     dep>0&&M.refund_text&&h('div',{class:'box blue'},h('b',{},'سياسة الاسترداد'),h('p',{},M.refund_text)),
-    M.whatsapp&&h('a',{class:'b1',href:'https://wa.me/'+wa(M.whatsapp)+'?text='+encodeURIComponent(msg),target:'_blank',rel:'noopener'},dep>0?'ابعت صورة التحويل على واتساب':'تواصل مع التاجر على واتساب'));
+    M.whatsapp&&h('a',{class:'b1',href:'https://wa.me/'+wa(M.whatsapp)+'?text='+encodeURIComponent(msg),target:'_blank',rel:'noopener'},'تواصل مع التاجر على واتساب'));
 }
 load();
 
@@ -183,6 +225,9 @@ const two=(label,fn,ct)=>{const b=h('button',{class:'dg'},label);
   b.onclick=()=>{if(armed===b){armed=null;fn();return}armed=b;b.textContent=ct;b.classList.add('arm');
     setTimeout(()=>{if(armed===b){armed=null;b.textContent=label;b.classList.remove('arm')}},4000)};return b};
 const inp=(id,l,v='',t='text')=>h('div',{},h('label',{for:id},l),h('input',{id,type:t,value:v}));
+const _y=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const _i=p=>SB_URL+'/storage/v1/object/public/items/'+p;
+function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
 
 async function boot(){
   clearInterval(timer);
@@ -239,11 +284,15 @@ async function vOrders(){
 const upO=async(id,p)=>{const {error}=await db.from('orders').update(p).eq('id',id);if(error)toast(error.message);vOrders()};
 function card(o){
   const tm=new Date(o.created_at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-  return h('div',{class:'od'},h('h3',{},o.customer_name),
+  return h('div',{class:'od'},h('h3',{},(o.order_no?'#'+o.order_no+' · ':'')+o.customer_name),
     h('p',{class:'pl'},'📞 '+o.phone+'\n☎ رقم التأكيد: '+o.phone2+'\n📍 '+String(o.address).split(' - ').join('\n')+(o.notes?'\n📝 '+o.notes:'')+'\n🕐 '+tm),
     h('p',{class:'pl'},o.lines.map(l=>'• '+l.name+' × '+l.qty+' = '+fmt(l.price*l.qty)).join('\n')+(o.booking_date?'\n📅 حجز مسبق، الموعد: '+o.booking_date:'')),
     h('b',{},fmt(o.total)+' جنيه'),
-    o.deposit>0&&h('p',{class:'pl'},'💰 العربون: '+fmt(o.deposit)+' جنيه\n'+(o.deposit_confirmed?'✅ تم التأكد من وصوله':'⏳ لم يُؤكَّد بعد')+'\n(صورة التحويل تصلك على واتساب)'),
+    o.deposit>0&&h('p',{class:'pl'},'💰 العربون: '+fmt(o.deposit)+' جنيه\n'+(o.deposit_confirmed?'✅ تم التأكد من وصوله':'⏳ لم يُؤكَّد بعد')),
+    o.proof_path&&h('button',{class:'b2 w',onclick:async e=>{const b=e.target;
+      const {data,error}=await db.storage.from('proofs').createSignedUrl(o.proof_path,3600);
+      if(error)return toast(error.message);
+      b.replaceWith(h('img',{src:data.signedUrl,alt:'صورة التحويل',style:'width:100%;border-radius:10px;margin:6px 0'}))}},'🖼 عرض صورة التحويل'),
     o.deposit>0&&h('button',{class:'b2 w',onclick:()=>upO(o.id,{deposit_confirmed:!o.deposit_confirmed})},o.deposit_confirmed?'إلغاء التأكيد':'تأكدت من وصول العربون'),
     h('div',{class:'st'},SN.map((n,k)=>h('button',{class:o.status===k?'on':'',onclick:()=>{
       if(k===1&&o.deposit>0&&!o.deposit_confirmed)return toast('أكّد وصول العربون أولًا');upO(o.id,{status:k})}},n))),
@@ -254,27 +303,43 @@ function card(o){
 }
 async function vItems(){
   const c=$('c'),{data}=await db.from('items').select('*').eq('merchant_id',M.id).order('created_at');
-  c.textContent='';c.append(h('p',{class:'pl'},'⚡ فوري: جاهز الآن. 📅 حجز: يحتاج موعدًا مسبقًا.'));
+  c.textContent='';c.append(h('p',{class:'pl'},'📷 اضغط على المربع لإضافة صورة المنتج من معرض الصور.\n⚡ فوري: جاهز الآن. 📅 حجز: يحتاج موعدًا مسبقًا.'));
   (data||[]).forEach(it=>{
     const sv=p=>db.from('items').update(p).eq('id',it.id).then(r=>{if(r.error)toast(r.error.message)});
-    c.append(h('div',{class:'row'},h('input',{value:it.name,onchange:e=>sv({name:e.target.value})}),
-      h('input',{type:'number',value:it.price,onchange:e=>sv({price:Math.max(0,Math.round(+e.target.value||0))})}),
-      h('select',{onchange:e=>sv({kind:e.target.value})},[['normal','عادي'],['ready','⚡ فوري'],['booking','📅 حجز']].map(([v,l])=>h('option',{value:v,selected:it.kind===v},l))),
-      two('×',async()=>{await db.from('items').delete().eq('id',it.id);vItems()},'حذف؟')));
+    const pick=async f=>{
+      if(!f)return;
+      try{
+        const bl=await compress(f),path=M.id+'/'+it.id+'-'+Date.now()+'.jpg';
+        const up=await db.storage.from('items').upload(path,bl,{contentType:'image/jpeg'});
+        if(up.error)return toast('تعذّر رفع الصورة: '+up.error.message);
+        const old=it.image_path;
+        await db.from('items').update({image_path:path}).eq('id',it.id);
+        if(old)db.storage.from('items').remove([old]);
+        vItems();
+      }catch(e){toast('تعذّر قراءة الصورة')}
+    };
+    c.append(h('div',{class:'box irow'},
+      h('label',{class:'th'},it.image_path?h('img',{src:SB_URL+'/storage/v1/object/public/items/'+it.image_path,alt:it.name}):'📷 صورة',
+        h('input',{type:'file',accept:'image/*',style:'display:none',onchange:e=>pick(e.target.files[0])})),
+      h('div',{class:'if'},h('input',{value:it.name,onchange:e=>sv({name:e.target.value})}),
+        h('div',{class:'row'},
+          h('input',{type:'number',value:it.price,onchange:e=>sv({price:Math.max(0,Math.round(+e.target.value||0))})}),
+          h('select',{onchange:e=>sv({kind:e.target.value})},[['normal','عادي'],['ready','⚡ فوري'],['booking','📅 حجز']].map(([v,l])=>h('option',{value:v,selected:it.kind===v},l))),
+          two('×',async()=>{if(it.image_path)db.storage.from('items').remove([it.image_path]);await db.from('items').delete().eq('id',it.id);vItems()},'حذف؟')))));
   });
   c.append(h('button',{class:'b1 w',onclick:async()=>{const {error}=await db.from('items').insert({merchant_id:M.id,name:'صنف جديد',price:0});if(error)toast(error.message);vItems()}},'+ إضافة صنف'));
 }
 function vSet(){
   const c=$('c');c.textContent='';
   const F=[['name','اسم المتجر'],['activity','نشاطك'],['whatsapp','واتساب الطلبات','tel'],['days','أيام التوصيل أو المواعيد'],['deposit_pct','نسبة العربون %','number'],
-    ['min_order','أقل قيمة للطلب','number'],['pay_info','طريقة استلام العربون (رقم المحفظة...)'],['lead_time','مدة الحجز المسبق (مثلًا 48 ساعة)'],['fixed_msg','رسالة الأسعار الثابتة']];
-  c.append(h('div',{class:'box'},...F.map(([k,l,t])=>inp('f_'+k,l,M[k]??'',t||'text')),
+    ['min_order','أقل قيمة للطلب','number'],['pay_info','أرقام استلام العربون (كل رقم في سطر)'],['lead_hours','مدة الحجز المسبق بالساعات (مثلًا 48)','number'],['delivery_note','ملاحظة التوصيل (اختياري، مثل: التوصيل 30 جنيه، أو مجاني فوق 500)'],['fixed_msg','رسالة الأسعار الثابتة']];
+  c.append(h('div',{class:'box'},...F.map(([k,l,t])=>k==='pay_info'?h('div',{},h('label',{for:'f_pay_info'},l),h('textarea',{id:'f_pay_info',rows:3,placeholder:'مثال:\nفودافون كاش 01000000000\nاتصالات كاش 01100000000'},M.pay_info||'')):inp('f_'+k,l,M[k]??'',t||'text')),
     h('label',{class:'ck'},h('input',{type:'checkbox',id:'f_fixed',checked:M.fixed_prices}),'الأسعار ثابتة بدون فصال (تظهر الرسالة للعميل)'),
     h('label',{for:'f_ref'},'سياسة الاسترداد (تظهر للعميل)'),h('textarea',{id:'f_ref',rows:4},M.refund_text||''),
     h('button',{class:'b1 w',onclick:async()=>{
       const p={fixed_prices:$('f_fixed').checked,refund_text:$('f_ref').value};
       F.forEach(([k,,t])=>{const v=$('f_'+k).value;p[k]=t==='number'?Math.max(0,Math.round(+v||0)):v});
-      p.deposit_pct=Math.min(100,p.deposit_pct);
+      p.deposit_pct=Math.min(100,p.deposit_pct);p.lead_time=p.lead_hours?p.lead_hours+' ساعة':'';
       const {error}=await db.from('merchants').update(p).eq('id',M.id);
       if(error)return toast(error.message);Object.assign(M,p);toast('تم الحفظ ✓')}},'حفظ الإعدادات')));
 }
