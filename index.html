@@ -65,11 +65,13 @@ label{display:block;font-size:13.5px;color:var(--mut)}
 .blue{background:#1B4F9C!important;border:3px solid #0F3370!important;color:#fff}.blue b,.blue p{color:#fff!important}
 .irow{display:flex;gap:10px;align-items:flex-start}.irow .if{flex:1;min-width:0}.irow .row{grid-template-columns:1fr 100px 54px;margin-top:6px}
 .th{width:76px;height:76px;border:1.5px dashed var(--line);border-radius:12px;display:grid;place-items:center;cursor:pointer;overflow:hidden;flex:none;color:var(--mut);font-size:12px;text-align:center}.th img{width:100%;height:100%;object-fit:cover}
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:8px}.hd h1{margin:0}.logo{width:60px;height:60px;border-radius:14px;object-fit:cover;flex:none;background:#fff}
 </style>
 </head>
 <body>
 <div id="toast" class="hide" role="alert"></div>
 <div id="app">جارٍ التحميل...</div>
+<div id="ver" style="text-align:center;font-size:11px;opacity:.55;margin:28px 0 8px">الإصدار 4 · اشتراكات ولوجو</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
@@ -104,7 +106,7 @@ const field=(id,l,p='',t='text')=>h('div',{},h('label',{for:id},l),h('input',{id
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const imgUrl=p=>SB_URL+'/storage/v1/object/public/items/'+p;
 const minDate=()=>ymd(new Date(Date.now()+Math.ceil((M.lead_hours||0)/24)*864e5));
-function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
+function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
 let proof=null;
 
 async function load(){
@@ -118,7 +120,7 @@ async function load(){
 }
 function draw(){
   const app=$('app');app.textContent='';
-  app.append(h('h1',{},M.name),M.activity&&h('p',{class:'sub'},M.activity),
+  app.append(h('div',{class:'hd'},M.logo_path&&h('img',{class:'logo',src:imgUrl(M.logo_path),alt:M.name}),h('div',{},h('h1',{},M.name),M.activity&&h('p',{class:'sub'},M.activity))),
     M.fixed_prices&&M.fixed_msg&&h('div',{class:'note'},M.fixed_msg),
     M.days&&h('div',{class:'note'},'التوصيل / المواعيد: '+M.days),
     M.delivery_note&&h('div',{class:'note'},'🚚 '+M.delivery_note),
@@ -219,6 +221,17 @@ const h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){cons
 const fmt=n=>Number(n).toLocaleString('ar-EG'),dg=s=>(s||'').replace(/\D/g,'');
 const SN=['جديد','جاري التنفيذ','تم التسليم','لم يُستلم'];
 let U=null,M=null,tab='orders',timer=null;
+const PRICE_TXT='100 جنيه شهريًا',SUPPORT_WA='';
+const live=()=>M.active&&(!M.expires_at||new Date(M.expires_at)>new Date());
+function subBanner(){
+  const sup=SUPPORT_WA?' للتواصل: '+SUPPORT_WA:'';
+  if(!M.active)return h('div',{class:'note'},'حسابك بانتظار التفعيل، ولن يرى العملاء صفحتك قبله. الاشتراك: '+PRICE_TXT+'.'+sup);
+  if(!M.expires_at)return null;
+  const d=Math.ceil((new Date(M.expires_at)-new Date())/864e5);
+  if(d<=0)return h('div',{class:'note',style:'background:#C0392B;color:#fff'},'انتهى اشتراكك وصفحتك مقفولة للعملاء. للتجديد ('+PRICE_TXT+').'+sup);
+  if(d<=5)return h('div',{class:'note'},'اشتراكك ينتهي بعد '+d.toLocaleString('ar-EG')+' يوم. للتجديد ('+PRICE_TXT+').'+sup);
+  return h('div',{class:'note'},'اشتراكك ساري حتى '+new Date(M.expires_at).toLocaleDateString('ar-EG')+'.');
+}
 const toast=t=>{const e=$('toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),3500)};
 let armed=null;
 const two=(label,fn,ct)=>{const b=h('button',{class:'dg'},label);
@@ -227,7 +240,7 @@ const two=(label,fn,ct)=>{const b=h('button',{class:'dg'},label);
 const inp=(id,l,v='',t='text')=>h('div',{},h('label',{for:id},l),h('input',{id,type:t,value:v}));
 const _y=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const _i=p=>SB_URL+'/storage/v1/object/public/items/'+p;
-function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
+function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
 
 async function boot(){
   clearInterval(timer);
@@ -261,8 +274,8 @@ function onboard(){
 }
 function main(){
   const a=$('app');a.textContent='';
-  a.append(h('div',{style:'display:flex;justify-content:space-between;align-items:center'},h('h1',{},M.name||M.slug),h('button',{class:'b2',onclick:()=>db.auth.signOut().then(boot)},'خروج')),
-    !M.active&&h('div',{class:'note'},'حسابك بانتظار التفعيل، ولن يرى العملاء صفحتك قبله.'),
+  a.append(h('div',{style:'display:flex;justify-content:space-between;align-items:center'},h('div',{style:'display:flex;align-items:center;gap:10px'},M.logo_path&&h('img',{class:'logo',src:SB_URL+'/storage/v1/object/public/items/'+M.logo_path,alt:''}),h('h1',{},M.name||M.slug)),h('button',{class:'b2',onclick:()=>db.auth.signOut().then(boot)},'خروج')),
+    subBanner(),
     h('div',{class:'tabs',id:'tb'}),h('div',{id:'c'}));
   const T=[['orders','الطلبات',vOrders],['items','القائمة',vItems],['set','الإعدادات',vSet],['bl','الحظر',vBlock],['link','الرابط']];
   T.forEach(([k,l])=>$('tb').append(h('button',{class:tab===k?'on':'',onclick:()=>{tab=k;main()}},l)));
@@ -329,11 +342,28 @@ async function vItems(){
   });
   c.append(h('button',{class:'b1 w',onclick:async()=>{const {error}=await db.from('items').insert({merchant_id:M.id,name:'صنف جديد',price:0});if(error)toast(error.message);vItems()}},'+ إضافة صنف'));
 }
+function logoCtl(){
+  return h('div',{class:'irow',style:'margin-bottom:10px'},
+    h('label',{class:'th'},M.logo_path?h('img',{src:SB_URL+'/storage/v1/object/public/items/'+M.logo_path,alt:'اللوجو'}):'🏷 لوجو',
+      h('input',{type:'file',accept:'image/*',style:'display:none',onchange:async e=>{
+        const f=e.target.files[0];if(!f)return;
+        try{
+          const bl=await compress(f),path=M.id+'/logo-'+Date.now()+'.jpg';
+          const up=await db.storage.from('items').upload(path,bl,{contentType:'image/jpeg'});
+          if(up.error)return toast('تعذّر رفع اللوجو: '+up.error.message);
+          const old=M.logo_path,r=await db.from('merchants').update({logo_path:path}).eq('id',M.id);
+          if(r.error)return toast(r.error.message);
+          if(old)db.storage.from('items').remove([old]);
+          M.logo_path=path;main();
+        }catch(x){toast('تعذّر قراءة الصورة')}
+      }})),
+    h('p',{class:'pl'},'لوجو متجرك: يظهر أعلى صفحة العملاء. يفضّل صورة مربعة.'));
+}
 function vSet(){
   const c=$('c');c.textContent='';
   const F=[['name','اسم المتجر'],['activity','نشاطك'],['whatsapp','واتساب الطلبات','tel'],['days','أيام التوصيل أو المواعيد'],['deposit_pct','نسبة العربون %','number'],
     ['min_order','أقل قيمة للطلب','number'],['pay_info','أرقام استلام العربون (كل رقم في سطر)'],['lead_hours','مدة الحجز المسبق بالساعات (مثلًا 48)','number'],['delivery_note','ملاحظة التوصيل (اختياري، مثل: التوصيل 30 جنيه، أو مجاني فوق 500)'],['fixed_msg','رسالة الأسعار الثابتة']];
-  c.append(h('div',{class:'box'},...F.map(([k,l,t])=>k==='pay_info'?h('div',{},h('label',{for:'f_pay_info'},l),h('textarea',{id:'f_pay_info',rows:3,placeholder:'مثال:\nفودافون كاش 01000000000\nاتصالات كاش 01100000000'},M.pay_info||'')):inp('f_'+k,l,M[k]??'',t||'text')),
+  c.append(h('div',{class:'box'},logoCtl(),...F.map(([k,l,t])=>k==='pay_info'?h('div',{},h('label',{for:'f_pay_info'},l),h('textarea',{id:'f_pay_info',rows:3,placeholder:'مثال:\nفودافون كاش 01000000000\nاتصالات كاش 01100000000'},M.pay_info||'')):inp('f_'+k,l,M[k]??'',t||'text')),
     h('label',{class:'ck'},h('input',{type:'checkbox',id:'f_fixed',checked:M.fixed_prices}),'الأسعار ثابتة بدون فصال (تظهر الرسالة للعميل)'),
     h('label',{for:'f_ref'},'سياسة الاسترداد (تظهر للعميل)'),h('textarea',{id:'f_ref',rows:4},M.refund_text||''),
     h('button',{class:'b1 w',onclick:async()=>{
@@ -360,13 +390,61 @@ function vLink(){
   c.append(h('div',{class:'box'},h('b',{},'رابط صفحة العملاء'),h('input',{value:url,readonly:true,onfocus:e=>e.target.select()}),
     h('button',{class:'b1 w',onclick:()=>navigator.clipboard.writeText(url).then(()=>toast('تم النسخ ✓')).catch(()=>toast('انسخه يدويًا من الخانة'))},'نسخ الرابط'),
     h('p',{class:'pl'},'الباركود (صوّره أو اطبعه):'),qr,
-    !M.active&&h('p',{class:'pl'},'⚠ الصفحة لا تظهر للعملاء قبل تفعيل حسابك.')));
+    !live()&&h('p',{class:'pl'},'⚠ الصفحة لا تظهر للعملاء الآن (الحساب غير مفعّل أو الاشتراك منتهي).')));
 }
 boot();
 
 }
+
+function runAdmin(){
+  const SB_URL='https://yyymlcpgsbpsgaacesxr.supabase.co';
+  const SB_KEY='sb_publishable_Q3QiDqCjdOj-CiASHEvO0A_Jdp1L1R-';
+  const db=supabase.createClient(SB_URL,SB_KEY);
+  const _ap=Element.prototype.append;Element.prototype.append=function(...c){return _ap.apply(this,c.filter(x=>x!==false&&x!=null))};
+  const $=id=>document.getElementById(id);
+  const h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){const v=a[k];if(v==null||v===false)continue;
+    if(k==='class')e.className=v;else if(k.startsWith('on'))e[k]=v;else e.setAttribute(k,v)}
+    c.flat().filter(x=>x!=null&&x!==false).forEach(x=>e.append(x.nodeType?x:document.createTextNode(x)));return e};
+  const toast=t=>{const e=$('toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),3500)};
+  let armed=null;
+  const two=(label,fn,ct)=>{const b=h('button',{class:'dg'},label);
+    b.onclick=()=>{if(armed===b){armed=null;fn();return}armed=b;b.textContent=ct;b.classList.add('arm');
+      setTimeout(()=>{if(armed===b){armed=null;b.textContent=label;b.classList.remove('arm')}},4000)};return b};
+  const act=async(id,a)=>{const {error}=await db.rpc('admin_set',{p_id:id,p_action:a});if(error)return toast(error.message);toast('تم ✓');load()};
+  async function boot(){const {data:{session}}=await db.auth.getSession();session?load():login()}
+  function login(){
+    const a=$('app');a.textContent='';
+    a.append(h('h1',{},'لوحة الإدارة'),h('div',{class:'box'},
+      h('label',{for:'em'},'البريد الإلكتروني'),h('input',{id:'em',type:'email'}),
+      h('label',{for:'pw'},'كلمة السر'),h('input',{id:'pw',type:'password'}),
+      h('button',{class:'b1 w',onclick:async()=>{
+        const r=await db.auth.signInWithPassword({email:$('em').value.trim(),password:$('pw').value});
+        if(r.error)return toast(r.error.message);boot()}},'دخول')));
+  }
+  async function load(){
+    const {data,error}=await db.rpc('admin_list'),a=$('app');a.textContent='';
+    const out=h('button',{class:'b2',onclick:()=>db.auth.signOut().then(boot)},'خروج');
+    if(error)return a.append(h('h1',{},'غير مسموح'),h('p',{class:'pl'},String(error.message).includes('not_admin')?'هذا الحساب ليس أدمن.':error.message),out);
+    a.append(h('div',{style:'display:flex;justify-content:space-between;align-items:center'},h('h1',{},'لوحة الإدارة'),out),
+      h('p',{class:'pl'},'عدد التجار: '+data.length.toLocaleString('ar-EG')));
+    data.forEach(m=>{
+      const exp=m.expires_at?new Date(m.expires_at):null,now=new Date();
+      const st=!m.active?'⛔ غير مفعّل':!exp?'✅ مفعّل (بدون تاريخ انتهاء)':exp>now?'✅ ساري حتى '+exp.toLocaleDateString('ar-EG'):'⌛ منتهي منذ '+exp.toLocaleDateString('ar-EG');
+      const link=location.origin+location.pathname+'?s='+m.slug;
+      a.append(h('div',{class:'od'},h('h3',{},(m.name||'—')+' ('+m.slug+')'),
+        h('p',{class:'pl'},'📧 '+m.email+'\n📞 '+(m.whatsapp||'—')+'\n🧾 الطلبات: '+Number(m.orders_count).toLocaleString('ar-EG')+'\n'+st),
+        h('a',{href:link,target:'_blank',rel:'noopener',style:'font-size:13px;word-break:break-all'},link),
+        h('div',{class:'st'},
+          h('button',{onclick:()=>act(m.id,'trial')},'تجربة 7 أيام'),
+          h('button',{class:'on',onclick:()=>act(m.id,'renew')},'تجديد 30 يوم')),
+        h('div',{class:'st'},two('إيقاف الحساب',()=>act(m.id,'stop'),'اضغط للإيقاف'))));
+    });
+  }
+  boot();
+}
+const isAdmin=new URLSearchParams(location.search).has('admin');
 const isCustomer=/\/m\/[a-z0-9-]+/.test(location.pathname)||new URLSearchParams(location.search).has('s');
-if(isCustomer)runCustomer();else runOwner();
+if(isAdmin)runAdmin();else if(isCustomer)runCustomer();else runOwner();
 </script>
 </body>
 </html>
