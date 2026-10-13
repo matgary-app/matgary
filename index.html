@@ -71,7 +71,7 @@ label{display:block;font-size:13.5px;color:var(--mut)}
 <body>
 <div id="toast" class="hide" role="alert"></div>
 <div id="app">جارٍ التحميل...</div>
-<div id="ver" style="text-align:center;font-size:11px;opacity:.55;margin:28px 0 8px">الإصدار 4 · اشتراكات ولوجو</div>
+<div id="ver" style="text-align:center;font-size:11px;opacity:.55;margin:28px 0 8px">الإصدار 6 · دفع كامل وتذكيرات</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
@@ -108,6 +108,7 @@ const imgUrl=p=>SB_URL+'/storage/v1/object/public/items/'+p;
 const minDate=()=>ymd(new Date(Date.now()+Math.ceil((M.lead_hours||0)/24)*864e5));
 function compress(f){return new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error('x')),'image/jpeg',.7)};im.onerror=()=>no(new Error('img'));im.src=fr.result};fr.onerror=()=>no(new Error('read'));fr.readAsDataURL(f)})}
 let proof=null;
+const pmode=()=>{const r=document.querySelector('input[name=pm]:checked');return r?r.value:'deposit'};
 
 async function load(){
   const app=$('app');
@@ -131,7 +132,12 @@ function draw(){
       field('a1','المحافظة'),field('a2','المدينة'),field('a3','القرية أو الحي'),field('a4','الشارع'),field('a5','رقم المنزل، بجوار كذا أو أمام كذا'),field('nt','ملاحظات (اختياري)')),
     h('div',{id:'bk',class:'box red hide'},h('b',{},'⚠ حجز مسبق: انتبه للموعد'),h('label',{for:'bd'},'موعد الاستلام المطلوب'),h('input',{id:'bd',type:'date'}),h('p',{id:'bl'})),
     h('div',{id:'dp',class:'box hide'}),
-    h('div',{id:'pfb',class:'box hide'},h('label',{for:'pf'},'صورة (سكرين شوت) تحويل العربون — مطلوبة قبل إرسال الطلب'),h('input',{id:'pf',type:'file',accept:'image/*'}),h('img',{id:'pv',class:'hide',alt:'معاينة صورة التحويل'})),
+    h('div',{id:'pm',class:'box hide'},h('b',{},'طريقة الدفع'),
+      h('label',{class:'ck',style:'margin-top:8px'},h('input',{type:'radio',name:'pm',value:'deposit',checked:true,onchange:()=>upd()}),h('span',{id:'pm1'})),
+      h('label',{class:'ck',style:'margin-top:8px'},h('input',{type:'radio',name:'pm',value:'full',onchange:()=>upd()}),h('span',{id:'pm2'}))),
+    h('div',{id:'pfb',class:'box hide'},h('b',{},'بيانات التحويل (مطلوبة قبل إرسال الطلب)'),
+      h('label',{for:'pf'},'صورة (سكرين شوت) رسالة التحويل'),h('input',{id:'pf',type:'file',accept:'image/*'}),h('img',{id:'pv',class:'hide',alt:'معاينة صورة التحويل'}),
+      field('pr','رقم العملية (من رسالة التحويل)'),field('pfm','الرقم اللي حوّلت منه','01xxxxxxxxx','tel')),
     h('div',{id:'rf',class:'box blue hide'}),
     h('div',{class:'tot'},h('span',{},'الإجمالي'),h('span',{id:'sum'},'٠ جنيه')),
     h('div',{id:'err',class:'err hide',role:'alert'}),h('button',{class:'b1',id:'go',onclick:send},'أرسل الطلب'));
@@ -160,8 +166,12 @@ function upd(){
   const lh=M.lead_hours||0;
   $('bl').textContent='هذا حجز مسبق وليس فوريًا. '+(lh?'لا يُقبل موعد قبل '+fmt(lh)+' ساعة على الأقل من الآن، وأقرب موعد متاح: '+minDate()+'.':'اختر الموعد المناسب.');
   $('bd').min=minDate();
+  const full=M.deposit_pct>=100||pmode()==='full',pay=full?t:dep,rest=t-pay;
+  $('pm').classList.toggle('hide',!(t&&M.deposit_pct>0&&M.deposit_pct<100));
+  $('pm1').textContent='أدفع العربون ('+fmt(dep)+' جنيه) والباقي ('+fmt(t-dep)+' جنيه) عند الاستلام';
+  $('pm2').textContent='أدفع كامل المبلغ ('+fmt(t)+' جنيه) الآن';
   const d=$('dp');d.classList.toggle('hide',!(t&&dep>0));$('pfb').classList.toggle('hide',!(t&&M.deposit_pct>0));
-  d.textContent='';if(dep>0)d.append(h('b',{},'العربون المطلوب: '+fmt(dep)+' جنيه'),h('p',{},'حوّله على أحد الأرقام التالية، ثم أرفق صورة التحويل بالأسفل قبل إرسال الطلب:'),payList());
+  d.textContent='';if(dep>0)d.append(h('b',{},'المطلوب تحويله الآن: '+fmt(pay)+' جنيه'),h('p',{style:'font-weight:800'},rest>0?'المتبقي عليك عند الاستلام: '+fmt(rest)+' جنيه':'لا يوجد متبقي، دفعت كامل المبلغ.'),h('p',{},'حوّل على أحد الأرقام التالية، ثم أرفق صورة التحويل وبياناته بالأسفل قبل إرسال الطلب:'),payList());
   const r=$('rf');r.classList.toggle('hide',!(t&&dep>0&&M.refund_text));r.textContent='';
   if(M.refund_text)r.append(h('b',{},'سياسة الاسترداد'),h('p',{},M.refund_text));
 }
@@ -180,7 +190,11 @@ async function send(){
   const bk=sel.some(i=>i.kind==='booking');
   if(bk&&!$('bd').value)return err('اختر موعد الاستلام المطلوب');
   if(bk&&$('bd').value<minDate())return err('أقرب موعد متاح للحجز هو '+minDate());
-  if(M.deposit_pct>0&&!proof)return err('أرفق صورة تحويل العربون قبل إرسال الطلب');
+  if(M.deposit_pct>0){
+    if(!proof)return err('أرفق صورة التحويل قبل إرسال الطلب');
+    if(v('pr').length<4)return err('اكتب رقم العملية كما في رسالة التحويل');
+    if(dg(v('pfm')).length<10)return err('اكتب الرقم الذي حوّلت منه');
+  }
   err('');const go=$('go');go.disabled=true;go.textContent='جارٍ الإرسال...';
   let pp=null;
   if(proof){
@@ -190,18 +204,19 @@ async function send(){
   }
   const {data,error}=await db.rpc('place_order',{p_slug:slug,p_name:v('cn'),p_phone:v('cp'),p_phone2:v('cp2'),
     p_address:A.map(([k,n])=>n+': '+v(k)).join(' - '),p_notes:v('nt'),
-    p_lines:sel.map(i=>({item_id:i.id,qty:cart[i.id]})),p_booking:bk?$('bd').value:null,p_proof:pp});
+    p_lines:sel.map(i=>({item_id:i.id,qty:cart[i.id]})),p_booking:bk?$('bd').value:null,p_proof:pp,p_pay_mode:(M.deposit_pct>=100?'full':pmode()),p_pay_ref:v('pr'),p_pay_from:v('pfm')});
   go.disabled=false;go.textContent='أرسل الطلب';
   if(error){const m=error.message||'';
-    return err(m.includes('blocked')?'عذرًا، لا نستطيع استقبال طلبك حاليًا.':m.includes('below_min')?'قيمة الطلب أقل من الحد الأدنى.':m.includes('bad_input')?'راجع الاسم وأرقام الموبايل.':m.includes('booking_too_soon')?'موعد الحجز قريب جدًا، اختر موعدًا لاحقًا.':m.includes('proof_required')?'أرفق صورة تحويل العربون قبل الإرسال.':'تعذّر إرسال الطلب، حاول مرة أخرى.')}
+    return err(m.includes('blocked')?'عذرًا، لا نستطيع استقبال طلبك حاليًا.':m.includes('below_min')?'قيمة الطلب أقل من الحد الأدنى.':m.includes('bad_input')?'راجع الاسم وأرقام الموبايل.':m.includes('booking_too_soon')?'موعد الحجز قريب جدًا، اختر موعدًا لاحقًا.':m.includes('proof_required')?'أرفق صورة التحويل قبل الإرسال.':m.includes('ref_required')?'اكتب رقم العملية والرقم الذي حوّلت منه.':m.includes('ref_used')?'رقم العملية هذا مستخدم في طلب سابق.':'تعذّر إرسال الطلب، حاول مرة أخرى.')}
   done(data||{},v('cn'));
 }
 function done(r,name){
-  const dep=r.deposit||0,app=$('app');app.textContent='';
-  const msg='مرحبًا، أنا '+name+'. رقم طلبي #'+(r.order_no||'')+(dep>0?'، وحوّلت العربون ('+dep+' جنيه) وأرفقت صورة التحويل في الموقع.':'.');
+  const dep=r.deposit||0,rest=r.remaining||0,app=$('app');app.textContent='';
+  const msg='مرحبًا، أنا '+name+'. رقم طلبي #'+(r.order_no||'')+(dep>0?'، دفعت '+dep+' جنيه'+(rest>0?' والمتبقي '+rest+' جنيه عند الاستلام':' (كامل المبلغ)')+'، وأرفقت صورة التحويل في الموقع.':'.');
   app.append(h('h1',{},'✓ تم استلام طلبك'),h('div',{class:'note'},'رقم طلبك: #'+(r.order_no||'')+' (احتفظ به)'),
-    h('p',{class:'sub'},'سيتواصل معك '+M.name+' لتأكيد الطلب.'),
-    dep>0&&h('div',{class:'box'},h('b',{},'العربون المحسوب: '+fmt(dep)+' جنيه'),h('p',{},'تم رفع صورة التحويل. لو حوّلت أقل من هذا المبلغ، سيتواصل معك التاجر. أرقام التحويل:'),payList()),
+    h('p',{class:'sub'},'سيتواصل معك '+M.name+' لتأكيد الطلب بعد مراجعة التحويل.'),
+    h('div',{class:'box',style:'font-weight:800;line-height:1.9'},h('div',{},'إجمالي الطلب: '+fmt(r.total||0)+' جنيه'),h('div',{},'✅ المدفوع: '+fmt(dep)+' جنيه'),h('div',{},'📦 المتبقي عند الاستلام: '+fmt(rest)+' جنيه')),
+    dep>0&&h('p',{class:'sub'},'إن كان عليك طلب سابق لم يُستلم قد يطلب التاجر دفع كامل المبلغ.'),
     dep>0&&M.refund_text&&h('div',{class:'box blue'},h('b',{},'سياسة الاسترداد'),h('p',{},M.refund_text)),
     M.whatsapp&&h('a',{class:'b1',href:'https://wa.me/'+wa(M.whatsapp)+'?text='+encodeURIComponent(msg),target:'_blank',rel:'noopener'},'تواصل مع التاجر على واتساب'));
 }
@@ -221,15 +236,18 @@ const h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){cons
 const fmt=n=>Number(n).toLocaleString('ar-EG'),dg=s=>(s||'').replace(/\D/g,'');
 const SN=['جديد','جاري التنفيذ','تم التسليم','لم يُستلم'];
 let U=null,M=null,tab='orders',timer=null;
-const PRICE_TXT='100 جنيه شهريًا',SUPPORT_WA='';
+let PRICE_TXT='200 جنيه شهريًا',SUPPORT_WA='',RENEW_PAY='';
+const waNum=p=>{const d=(p||'').replace(/\D/g,'');return d.startsWith('0')?'2'+d:d};
 const live=()=>M.active&&(!M.expires_at||new Date(M.expires_at)>new Date());
 function subBanner(){
-  const sup=SUPPORT_WA?' للتواصل: '+SUPPORT_WA:'';
-  if(!M.active)return h('div',{class:'note'},'حسابك بانتظار التفعيل، ولن يرى العملاء صفحتك قبله. الاشتراك: '+PRICE_TXT+'.'+sup);
+  const sup=()=>SUPPORT_WA?h('a',{href:'https://wa.me/'+waNum(SUPPORT_WA)+'?text='+encodeURIComponent('أريد '+(M.active?'تجديد':'تفعيل')+' اشتراك متجري: '+(M.name||M.slug)+' ('+M.slug+')'),target:'_blank',rel:'noopener',style:'display:block;text-align:center;text-decoration:none;background:#F4C23D;color:#3A1128;font-weight:800;padding:10px;border-radius:10px;margin-top:8px'},'📲 تواصل مع الدعم على واتساب'):null;
+  const how=()=>'للتجديد ('+PRICE_TXT+') يرجى الدفع على: '+(RENEW_PAY||'رقم الكاش الذي تحدده الإدارة')+' ثم إرسال صورة التحويل للدعم.';
+  if(!M.active)return h('div',{class:'note'},'حسابك بانتظار التفعيل، ولن يرى العملاء صفحتك قبله. الاشتراك: '+PRICE_TXT+'.\n'+(RENEW_PAY?'الدفع على: '+RENEW_PAY:''),sup());
   if(!M.expires_at)return null;
-  const d=Math.ceil((new Date(M.expires_at)-new Date())/864e5);
-  if(d<=0)return h('div',{class:'note',style:'background:#C0392B;color:#fff'},'انتهى اشتراكك وصفحتك مقفولة للعملاء. للتجديد ('+PRICE_TXT+').'+sup);
-  if(d<=5)return h('div',{class:'note'},'اشتراكك ينتهي بعد '+d.toLocaleString('ar-EG')+' يوم. للتجديد ('+PRICE_TXT+').'+sup);
+  const hrs=(new Date(M.expires_at)-new Date())/36e5,d=Math.ceil(hrs/24);
+  if(hrs<=0)return h('div',{class:'note',style:'background:#C0392B;color:#fff'},'⛔ انتهى اشتراكك وصفحتك مقفولة للعملاء.\n'+how(),sup());
+  if(hrs<=48)return h('div',{class:'note',style:'background:#E67E22;color:#fff;font-weight:800'},'⚠ باقي أقل من 48 ساعة على نهاية اشتراكك!\n'+how(),sup());
+  if(d<=7)return h('div',{class:'note'},'⏳ باقي '+d.toLocaleString('ar-EG')+' أيام على نهاية اشتراكك.\n'+how(),sup());
   return h('div',{class:'note'},'اشتراكك ساري حتى '+new Date(M.expires_at).toLocaleDateString('ar-EG')+'.');
 }
 const toast=t=>{const e=$('toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),3500)};
@@ -247,6 +265,7 @@ async function boot(){
   const {data:{session}}=await db.auth.getSession();U=session?session.user:null;
   if(!U)return authView();
   const {data}=await db.from('merchants').select('*').eq('id',U.id).maybeSingle();
+  try{const {data:st}=await db.from('app_settings').select('*');(st||[]).forEach(r=>{if(r.key==='support_wa')SUPPORT_WA=r.value;if(r.key==='price_text')PRICE_TXT=r.value;if(r.key==='renew_pay')RENEW_PAY=r.value})}catch(e){}
   M=data;M?main():onboard();
 }
 function authView(){
@@ -301,7 +320,7 @@ function card(o){
     h('p',{class:'pl'},'📞 '+o.phone+'\n☎ رقم التأكيد: '+o.phone2+'\n📍 '+String(o.address).split(' - ').join('\n')+(o.notes?'\n📝 '+o.notes:'')+'\n🕐 '+tm),
     h('p',{class:'pl'},o.lines.map(l=>'• '+l.name+' × '+l.qty+' = '+fmt(l.price*l.qty)).join('\n')+(o.booking_date?'\n📅 حجز مسبق، الموعد: '+o.booking_date:'')),
     h('b',{},fmt(o.total)+' جنيه'),
-    o.deposit>0&&h('p',{class:'pl'},'💰 العربون: '+fmt(o.deposit)+' جنيه\n'+(o.deposit_confirmed?'✅ تم التأكد من وصوله':'⏳ لم يُؤكَّد بعد')),
+    o.deposit>0&&h('p',{class:'pl'},'💰 المدفوع: '+fmt(o.deposit)+' جنيه ('+(o.pay_mode==='full'||o.deposit>=o.total?'كامل المبلغ':'عربون')+')\n📦 المتبقي عند الاستلام: '+fmt(o.total-o.deposit)+' جنيه'+(o.pay_ref?'\n🔢 رقم العملية: '+o.pay_ref:'')+(o.pay_from?'\n📱 حوّل من: '+o.pay_from:'')+'\n'+(o.deposit_confirmed?'✅ تم التأكد من وصوله':'⏳ لم يُؤكَّد بعد — قارن رقم العملية والمبلغ برسالة محفظتك قبل التأكيد')),
     o.proof_path&&h('button',{class:'b2 w',onclick:async e=>{const b=e.target;
       const {data,error}=await db.storage.from('proofs').createSignedUrl(o.proof_path,3600);
       if(error)return toast(error.message);
@@ -410,6 +429,7 @@ function runAdmin(){
   const two=(label,fn,ct)=>{const b=h('button',{class:'dg'},label);
     b.onclick=()=>{if(armed===b){armed=null;fn();return}armed=b;b.textContent=ct;b.classList.add('arm');
       setTimeout(()=>{if(armed===b){armed=null;b.textContent=label;b.classList.remove('arm')}},4000)};return b};
+  const waNum=p=>{const d=(p||'').replace(/\D/g,'');return d.startsWith('0')?'2'+d:d};
   const act=async(id,a)=>{const {error}=await db.rpc('admin_set',{p_id:id,p_action:a});if(error)return toast(error.message);toast('تم ✓');load()};
   async function boot(){const {data:{session}}=await db.auth.getSession();session?load():login()}
   function login(){
@@ -421,24 +441,53 @@ function runAdmin(){
         const r=await db.auth.signInWithPassword({email:$('em').value.trim(),password:$('pw').value});
         if(r.error)return toast(r.error.message);boot()}},'دخول')));
   }
+  let flt='all';
   async function load(){
     const {data,error}=await db.rpc('admin_list'),a=$('app');a.textContent='';
     const out=h('button',{class:'b2',onclick:()=>db.auth.signOut().then(boot)},'خروج');
     if(error)return a.append(h('h1',{},'غير مسموح'),h('p',{class:'pl'},String(error.message).includes('not_admin')?'هذا الحساب ليس أدمن.':error.message),out);
+    const {data:st}=await db.from('app_settings').select('*');
+    const g=k=>((st||[]).find(r=>r.key===k)||{}).value||'';
+    const now=new Date();
+    const dl=m=>m.expires_at?(new Date(m.expires_at)-now)/864e5:null;
+    const kind=m=>!m.active?'off':(m.expires_at&&new Date(m.expires_at)<=now)?'expired':(m.expires_at&&dl(m)<=7)?'soon':'ok';
+    const cnt=k=>data.filter(m=>kind(m)===k).length;
     a.append(h('div',{style:'display:flex;justify-content:space-between;align-items:center'},h('h1',{},'لوحة الإدارة'),out),
       h('p',{class:'pl'},'عدد التجار: '+data.length.toLocaleString('ar-EG')));
-    data.forEach(m=>{
-      const exp=m.expires_at?new Date(m.expires_at):null,now=new Date();
-      const st=!m.active?'⛔ غير مفعّل':!exp?'✅ مفعّل (بدون تاريخ انتهاء)':exp>now?'✅ ساري حتى '+exp.toLocaleDateString('ar-EG'):'⌛ منتهي منذ '+exp.toLocaleDateString('ar-EG');
-      const link=location.origin+location.pathname+'?s='+m.slug;
-      a.append(h('div',{class:'od'},h('h3',{},(m.name||'—')+' ('+m.slug+')'),
-        h('p',{class:'pl'},'📧 '+m.email+'\n📞 '+(m.whatsapp||'—')+'\n🧾 الطلبات: '+Number(m.orders_count).toLocaleString('ar-EG')+'\n'+st),
-        h('a',{href:link,target:'_blank',rel:'noopener',style:'font-size:13px;word-break:break-all'},link),
-        h('div',{class:'st'},
-          h('button',{onclick:()=>act(m.id,'trial')},'تجربة 7 أيام'),
-          h('button',{class:'on',onclick:()=>act(m.id,'renew')},'تجديد 30 يوم')),
-        h('div',{class:'st'},two('إيقاف الحساب',()=>act(m.id,'stop'),'اضغط للإيقاف'))));
-    });
+    a.append(h('div',{class:'box'},h('b',{},'إعدادات الإدارة'),
+      h('label',{for:'sw'},'رقم واتساب الدعم (يظهر للتجار)'),h('input',{id:'sw',type:'tel',value:g('support_wa')}),
+      h('label',{for:'sr'},'رقم/طريقة استلام الاشتراك (كاش) — يظهر في شريط التجديد'),h('input',{id:'sr',value:g('renew_pay'),placeholder:'مثال: فودافون كاش 01000000000'}),
+      h('label',{for:'sp'},'نص سعر الاشتراك'),h('input',{id:'sp',value:g('price_text')}),
+      h('button',{class:'b1 w',onclick:async()=>{
+        for(const [k,id] of [['support_wa','sw'],['renew_pay','sr'],['price_text','sp']]){
+          const r=await db.rpc('admin_set_setting',{p_key:k,p_value:$(id).value.trim()});if(r.error)return toast(r.error.message)}
+        toast('تم الحفظ ✓')}},'حفظ')));
+    const F=[['all','الكل',data.length],['soon','ينتهي قريبًا',cnt('soon')],['expired','منتهي',cnt('expired')],['off','غير مفعّل',cnt('off')],['ok','ساري',cnt('ok')]];
+    a.append(h('div',{class:'tabs'},F.map(([k,l,n])=>h('button',{class:flt===k?'on':'',onclick:()=>{flt=k;load()}},l+' ('+n.toLocaleString('ar-EG')+')'))),
+      h('input',{id:'qs',placeholder:'ابحث بالاسم أو الإيميل أو الرابط...',oninput:()=>drawList()}));
+    const box=h('div',{id:'lst'});a.append(box);
+    function drawList(){
+      const q=($('qs').value||'').trim().toLowerCase();
+      let L=data.filter(m=>(flt==='all'||kind(m)===flt)&&(!q||[m.name,m.email,m.slug].join(' ').toLowerCase().includes(q)));
+      if(flt==='soon'||flt==='expired')L=[...L].sort((x,y)=>new Date(x.expires_at)-new Date(y.expires_at));
+      box.textContent='';
+      if(!L.length)box.append(h('p',{class:'pl'},'لا يوجد تجار في هذه القائمة.'));
+      L.forEach(m=>{
+        const exp=m.expires_at?new Date(m.expires_at):null,d=dl(m),k=kind(m);
+        const stx=!m.active?'⛔ غير مفعّل':!exp?'✅ مفعّل (بدون تاريخ انتهاء)':exp>now?'✅ ساري حتى '+exp.toLocaleDateString('ar-EG')+' (باقي '+Math.ceil(d).toLocaleString('ar-EG')+' يوم)':'⌛ منتهي منذ '+exp.toLocaleDateString('ar-EG');
+        const link=location.origin+location.pathname+'?s='+m.slug;
+        const txt='أهلًا '+(m.name||'')+'، '+(k==='expired'?'انتهى':'اقترب انتهاء')+' اشتراك متجرك على منصة متجري'+(k==='soon'?' (باقي '+Math.ceil(d)+' يوم)':'')+'. للتجديد ('+g('price_text')+') يرجى الدفع على: '+(g('renew_pay')||'—')+' ثم إرسال صورة التحويل هنا.';
+        box.append(h('div',{class:'od'},h('h3',{},(m.name||'—')+' ('+m.slug+')'),
+          h('p',{class:'pl'},'📧 '+m.email+'\n📞 '+(m.whatsapp||'—')+'\n🧾 الطلبات: '+Number(m.orders_count).toLocaleString('ar-EG')+'\n'+stx),
+          h('a',{href:link,target:'_blank',rel:'noopener',style:'font-size:13px;word-break:break-all'},link),
+          m.whatsapp&&(k==='soon'||k==='expired')&&h('a',{class:'b1',href:'https://wa.me/'+waNum(m.whatsapp)+'?text='+encodeURIComponent(txt),target:'_blank',rel:'noopener',style:'display:block;text-align:center;text-decoration:none;padding:10px;border-radius:10px;margin-top:8px'},'📲 أرسل تذكير بالتجديد على واتساب'),
+          h('div',{class:'st'},
+            h('button',{onclick:()=>act(m.id,'trial')},'تجربة 7 أيام'),
+            h('button',{class:'on',onclick:()=>act(m.id,'renew')},'تجديد 30 يوم')),
+          h('div',{class:'st'},two('إيقاف الحساب',()=>act(m.id,'stop'),'اضغط للإيقاف'))));
+      });
+    }
+    drawList();
   }
   boot();
 }
